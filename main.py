@@ -74,12 +74,12 @@ def ADTformat():
             workbook = SheetUtil.excelUtil(os.path.join(DIRECTORY_PATH_MAINLINE, filename))
             sheet = workbook.getSheet(0)
 
-            p = workbook.findCell(MAINLINE_KEYWORDS[0])
+
             if workbook.findCell(MAINLINE_KEYWORDS[0])[0] == True:
                 print 'Entering ' + filename
                 #Get data
                 location = workbook.getLocation()
-                DATE = workbook.getDate()
+                DATE = workbook.getDate('DATE:')
 
                 #Initilaze instance of mapUtils
                 mapUtil = SheetUtil.mapUtil(location, GOOGLEMAP_APIKEY)
@@ -144,3 +144,16 @@ def ADTformat():
                 else:
                     shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE,filename), DIRECTORY_PATH_ORIGINAL)
 
+def CountsUnlimitedFormat():
+    for filename in mainlineDir:
+        if filename.endswith('xlsx') or filename.endswith('XLSX'):
+            workbook = SheetUtil.excelUtil(os.path.join(DIRECTORY_PATH_MAINLINE, filename))
+            sheet = workbook.getSheet(0)
+
+            if workbook.findCell([MAINLINE_KEYWORDS[1]])[0]:
+                print 'Entering ' + filename
+                DATE = workbook.getDate('Date:')
+                print(DATE)
+
+
+CountsUnlimitedFormat()
