@@ -8,7 +8,8 @@ while True:
                       "1. Sort turns and mainline counts\n"
                       "2. Remove duplicate pdfs\n"
                       "3. Format ADT counts\n"
-                      "4. Exit Program\n"))
+                      "4. Format Counts Unlimited Counts"
+                      "5. Exit Program\n"))
 
     if module == 1:
         main.excelSort()
@@ -17,6 +18,8 @@ while True:
     elif module == 3:
         main.ADTformat()
     elif module == 4:
+        main.CountsUnlimitedFormat()
+    elif module == 5:
         sys.exit()
     else:
         print "Invalid input"

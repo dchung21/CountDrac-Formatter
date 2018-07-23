@@ -7,6 +7,7 @@ MONTHS = {v: k for k, v in enumerate(calendar.month_name)}
 CONFIG = configparser.ConfigParser()
 CONFIG.read('CONFIG.ini')
 SOMA_DIRECTION = CONFIG.get("BASE_FILES", "SOMA_DIRECTION")
+STREETS = CONFIG.get("BASE_FILES", "STREETS")
 
 
 #Handles excel reads
@@ -21,7 +22,7 @@ class excelUtil:
     #Opens and returns sheet by index
     def getSheet(self, i):
         self.sheet = self.workbook.sheet_by_index(i)
-        return sheet
+        return self.sheet
 
     #Parameters: String array
     #Return [0]: True/False stating if the string was found in the sheet
@@ -71,16 +72,30 @@ class excelUtil:
 
     #Gets and formats date
     #Return formatted date
-    def getDate(self):
-        dateRow = self.findCell(['DATE:'])[1]
-        DATE = self.getRightCell(dateRow).value
-        return dateFormat(DATE)
+    def getDate(self, dateKeyword):
+        dateRow = self.findCell([dateKeyword])[1]
+        DATE = self.getRightCell(dateRow)
+        dateValue = DATE.value
+
+        if DATE.ctype == 1:
+
+            return dateFormat(dateValue)
+
+        elif DATE.ctype == 3:
+            return dateFormat(xldate_as_tuple(dateValue, self.workbook.datemode))
 
     #Gets location string from cell
-    def getLocation(self):
-        locationRow = self.findCell(['LOCATION:'])[1]
-        LOCATION = self.getRightCell(locationRow).value
-        return LOCATION
+    def getLocation(self, isCountsUnlimited):
+        if isCountsUnlimited == False:
+            locationRow = self.findCell(['LOCATION:'])[1]
+            LOCATION = self.getRightCell(locationRow).value
+            return LOCATION
+        else:
+            mainlineRow = self.findCell(['Street:'])[1]
+            streetRow = self.findCell(['Segment:'])[1]
+            mainline = self.getRightCell(mainlineRow).value
+            streets = self.getRightCell(streetRow).value
+            return mainline + ' ' + streets
 
     #Finds the direction of the sheet (NB,SB,EB,WB,
     #Returns dictionary {'NB': NBCoords, 'SB': SBCoords, 'EB': EBCoords, 'WB': WBCoords}
@@ -94,10 +109,10 @@ class excelUtil:
         EBCoords = [False]
         DIRECTIONS = {'NB': NBCoords, 'SB': SBCoords, 'EB': EBCoords, 'WB': WBCoords}
         tempDir = [NBCoords, SBCoords, WBCoords, EBCoords]
-        DIRECTION_KEYWORDS = [['NB Total Volume', 'NB Total Vol', 'NB'],
-                              ['SB Total Volume', 'SB Total Vol', 'SB'],
-                              ['WB Total Volume', 'WB Total Vol', 'WB'],
-                              ['EB Total Volume', 'EB Total Vol', 'EB']
+        DIRECTION_KEYWORDS = [['NB Total Volume', 'NB Total Vol', 'NB', 'Northbound'],
+                              ['SB Total Volume', 'SB Total Vol', 'SB', 'Southbound'],
+                              ['WB Total Volume', 'WB Total Vol', 'WB', 'Westbound'],
+                              ['EB Total Volume', 'EB Total Vol', 'EB', 'Eastbound']
                               ]
 
         for dir, key in zip(tempDir, DIRECTION_KEYWORDS):
@@ -123,9 +138,10 @@ class excelUtil:
     #Parameters: bounds of the data (rows and cols)
     def getData(self, rowMin, rowMax, colMin, colMax):
         DATA = deque([])
+        FLAGGED = False
 
         for row in range(rowMin, rowMax):
-            FLAGGED = False
+
             for col in range(colMin, colMax):
                 if self.checkEmptyCell(row, col):
                     FLAGGED = True
@@ -136,6 +152,8 @@ class excelUtil:
                 break
 
         return [DATA, FLAGGED]
+
+
 
 
 #Handle excel writes
@@ -182,7 +200,7 @@ class mapUtil:
         self.location = location
 
         StringsToRemove = ['Street', 'between', ' and', 'Bet.', '&', 'Avenue', 'between', 'and', 'San Francisco', ' St',
-                           'Ave', 'Blvd', 'Boulevard']
+                           'Ave', 'Blvd', 'Boulevard', ' -', 'Drive', 'Way']
         for string in StringsToRemove:
             self.location = self.location.replace(string, '')
 
@@ -203,6 +221,24 @@ class mapUtil:
 
     #Returns formatted filename
     def mainlineNaming(self):
+        matchedStreets = 0
+        name_error = ''
+
+        streetBook = excelUtil(STREETS)
+        street = streetBook.getSheet(0)
+        tempArray = [self.mainline, self.street1, self.street2]
+
+        for string in tempArray:
+                for row in range(street.nrows):
+                    if string.lower() == street.cell(row, 0).value:
+                        matchedStreets = matchedStreets + 1
+                        break
+
+
+        if matchedStreets != 3:
+            name_error = "NAME_ERROR"
+
+
         if self.isVertical:
             if self.lat_1 > self.lat_2:
                 filename = self.mainline + '_' + self.street1 + '.' + self.street2
@@ -215,7 +251,7 @@ class mapUtil:
             else:
                 filename = self.mainline + '_' + self.street2 + '.' + self.street1
 
-        filename = filename + '.xls'
+        filename = name_error + filename + '.xls'
 
         return filename
 
@@ -333,24 +369,28 @@ class mapUtil:
 #Parameter: Date from cell
 def dateFormat(DATE):
 
+    if isinstance(DATE, str) or isinstance(DATE, unicode):
+        #Splitting substring
+        tempDate = DATE[DATE.find(',') + 2:]
+        year = tempDate[tempDate.find(',') + 2:]
+        month = tempDate[:tempDate.find(' ')]
+        day = tempDate[tempDate.find(' ') + 1:tempDate.find(',')]
+        month = MONTHS[month]
+    elif isinstance(DATE, tuple):
+        year = DATE[0]
+        month = DATE[1]
+        day = DATE[2]
 
-    #Splitting substring
-    tempDate = DATE[DATE.find(',') + 2:]
-    year = tempDate[tempDate.find(',') + 2:]
-    month = tempDate[:tempDate.find(' ')]
-    day = tempDate[tempDate.find(' ') + 1:tempDate.find(',')]
-
-
-    numberMonth = MONTHS[month]
 
     #Add extra zero in front if the values are less than 10
 
-    if int(numberMonth) < 10:
-        numberMonth = '0' + str(numberMonth)
+    if int(month) < 10:
+        numberMonth = '0' + str(month)
 
     if int(day) < 10:
         day = '0' + str(day)
-    formattedDate = str(year) + '.' + str(numberMonth) + '.' + str(day)
+    formattedDate = str(year) + '.' + str(month) + '.' + str(day)
+
 
     return formattedDate
 
