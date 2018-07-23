@@ -16,7 +16,7 @@ while True:
     elif module == 2:
         main.pdfDuplicates()
     elif module == 3:
-        main.ADTformat()
+        main.ADTFormat()
     elif module == 4:
         main.CountsUnlimitedFormat()
     elif module == 5:

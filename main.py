@@ -14,12 +14,16 @@ TURNING_KEYWORDS = ast.literal_eval(CONFIG.get("FILTER_KEYWORDS", "TURNING_KEYWO
 GOOGLEMAP_APIKEY = CONFIG.get("API_KEY", "GOOGLEMAP_APIKEY")
 DIRECTORY_PATH_FORMATTED_MAINLINE = CONFIG.get("FILE_PATHS", "DIRECTORY_PATH_FORMATTED_MAINLINE")
 DIRECTORY_PATH_ORIGINAL = CONFIG.get("FILE_PATHS", "DIRECTORY_PATH_ORIGINAL" )
+DIRECTORY_PATH_REVIEW = CONFIG.get("FILE_PATHS", "DIRECTORY_PATH_REVIEW")
 fileDir = os.listdir(DIRECTORY_PATH)
 mainlineDir = os.listdir(DIRECTORY_PATH_MAINLINE)
 MONTHS = {v: k for k, v in enumerate(calendar.month_name)}
 
 class MainlineFormatShell():
-    def __init__(self, filterKeyword, fileDir, isCountsUnlimited, dateKeyword, isADT):
+    def __init__(self, filename, filterKeyword, fileDir, isCountsUnlimited, dateKeyword, isADT):
+        self.filename = filename
+        self.workbook = SheetUtil.excelUtil(os.path.join(DIRECTORY_PATH_MAINLINE, filename))
+        self.sheet = self.workbook.getSheet(0)
         self.filterKeyword = filterKeyword
         self.fileDir = fileDir
         self.isCountsUnlimited = isCountsUnlimited
@@ -27,27 +31,17 @@ class MainlineFormatShell():
         self.dateKeyword = dateKeyword
 
     def filterShell(self):
-        for filename in self.fileDir:
-            if filename.endswith(".xls") or filename.endswith(".XLSX") or filename.endswith(".xlsx"):
-
-                self.workbook = SheetUtil.excelUtil(os.path.join(DIRECTORY_PATH_MAINLINE, filename))
-                sheet = self.workbook.getSheet(0)
-
                 if self.workbook.findCell([self.filterKeyword])[0] == True:
-                    print 'Entering ' + filename
+                    print 'Entering ' + self.filename
 
                     #Get
 
                     self.location = self.workbook.getLocation(self.isCountsUnlimited)
-
                     self.DATE = self.workbook.getDate(self.dateKeyword)
-
                     self.mapUtil = SheetUtil.mapUtil(self.location, GOOGLEMAP_APIKEY)
                     self.newFilename = self.mapUtil.mainlineNaming()
-
                     self.inSoMa = self.mapUtil.SoMaCheck()
                     self.DIRECTIONS = self.workbook.findDirectionCell()
-
                     self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE)
                     self.excelWrite = SheetUtil.excelWrite(self.newBook, self.DATE)
 
@@ -56,6 +50,7 @@ class MainlineFormatShell():
                     for key in self.DIRECTIONS:
                         if self.DIRECTIONS.get(key)[0]:
                             dir = key
+
 
                             if self.isADT:
                                 if self.workbook.checkEmptyCell(self.DIRECTIONS.get(dir)[1], self.DIRECTIONS.get(dir)[2] - 2):
@@ -76,29 +71,29 @@ class MainlineFormatShell():
                                 colMin = self.DIRECTIONS.get(dir)[2] - 1
                                 colMax = self.DIRECTIONS.get(dir)[2] + 3
 
-                    if self.inSoMa:
-                        dir = self.mapUtil.directionFix(dir)
+                            if self.inSoMa:
+                                dir = self.mapUtil.directionFix(dir)
 
-                    self.DATA = self.workbook.getData(rowMin, rowMax, colMin, colMax)
+                            self.DATA = self.workbook.getData(rowMin, rowMax, colMin, colMax)
 
-                    self.excelWrite.inputData(0, self.DATA[0], 1, 1, self.filledCols )
+                            self.excelWrite.inputData(0, self.DATA[0], 1, 1, self.filledCols )
 
-                    if self.DATA[1] == False:
-                        self.excelWrite.write(0, 1, 1 + self.filledCols, dir)
-                        self.filledCols = self.filledCols + 1
+                            if self.DATA[1] == False:
+                                self.excelWrite.write(0, 1, 1 + self.filledCols, dir)
+                                self.filledCols = self.filledCols + 1
 
                     self.excelWrite.write(0, 1, 5, '')
-                    self.excelWrite.write(1, 0, 0, filename)
+                    self.excelWrite.write(1, 0, 0, self.filename)
                     self.newWorkbookSave = self.excelWrite.getWorkbook()
 
                     self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_FORMATTED_MAINLINE, self.newFilename))
 
                     # TODO: Add these file paths to config folder
                     if 'NAME_ERROR' not in self.newFilename:
-                        shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, filename),
+                        shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename),
                                     DIRECTORY_PATH_ORIGINAL)
                     else:
-                        shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, filename), DIRECTORY_PATH_ORIGINAL)
+                        shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_ORIGINAL)
 
 
 def excelSort():
@@ -152,14 +147,17 @@ def pdfDuplicates():
 
 
 def CountsUnlimitedFormat():
-    CU = MainlineFormatShell(MAINLINE_KEYWORDS[1], mainlineDir, True, 'Date:', False)
-    CU.filterShell()
+    for filename in mainlineDir:
+        CU = MainlineFormatShell(filename, MAINLINE_KEYWORDS[1], mainlineDir, True, 'Date:', False)
+        CU.filterShell()
 
 
 def ADTFormat():
-    adt = MainlineFormatShell(MAINLINE_KEYWORDS[0], mainlineDir, False, 'DATE:', True)
-    adt.filterShell()
+    for filename in mainlineDir:
+        adt = MainlineFormatShell(filename, MAINLINE_KEYWORDS[0], mainlineDir, False, 'DATE:', True)
+        adt.filterShell()
 
 def IDAXFormat():
-    idax = MainlineFormatShell(MAINLINE_KEYWORDS[2], mainlineDir, )
+    idax = MainlineFormatShell(MAINLINE_KEYWORDS[2], mainlineDir, False, 'DATE:', False)
 
+ADTFormat()

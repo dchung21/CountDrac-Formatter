@@ -154,6 +154,15 @@ class excelUtil:
         return [DATA, FLAGGED]
 
 
+    def checkInstance(self, string):
+        instance = []
+
+        for row in range(self.sheet.nrows):
+            for col in range(self.sheet.ncols):
+                if self.sheet.cell(row, col).value == string:
+                    instance.append((row, col))
+
+        return instance
 
 
 #Handle excel writes
