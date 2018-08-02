@@ -12,11 +12,17 @@ STREETS = CONFIG.get("BASE_FILES", "STREETS")
 
 #Handles excel reads
 class excelUtil:
+    DIRECTION_KEYWORDS = [['NB Total Volume', 'NB Total Vol', 'NB', 'Northbound'],
+                          ['SB Total Volume', 'SB Total Vol', 'SB', 'Southbound'],
+                          ['WB Total Volume', 'WB Total Vol', 'WB', 'Westbound'],
+                          ['EB Total Volume', 'EB Total Vol', 'EB', 'Eastbound']
+                          ]
 
     #Parameters: file path to excel workbook
     def __init__(self, filepath):
         self.filepath = filepath
         self.workbook = open_workbook(self.filepath)
+
 
     #Parameters: Sheet index
     #Opens and returns sheet by index
@@ -85,12 +91,13 @@ class excelUtil:
             return dateFormat(xldate_as_tuple(dateValue, self.workbook.datemode))
 
     #Gets location string from cell
-    def getLocation(self, isCountsUnlimited):
-        if isCountsUnlimited == False:
+    def getLocation(self, fileType):
+        if fileType == 'ADT':
             locationRow = self.findCell(['LOCATION:'])[1]
             LOCATION = self.getRightCell(locationRow).value
             return LOCATION
-        else:
+
+        elif fileType == 'CountsUnlimited':
             mainlineRow = self.findCell(['Street:'])[1]
             streetRow = self.findCell(['Segment:'])[1]
             mainline = self.getRightCell(mainlineRow).value
@@ -103,19 +110,16 @@ class excelUtil:
     # NBCoords[0] True/False depending on if NB was found in the sheet
     # NBCoords[1] [2] Row and col of where the NB cell is
     def findDirectionCell(self):
+
         NBCoords = [False]
         SBCoords = [False]
         WBCoords = [False]
         EBCoords = [False]
         DIRECTIONS = {'NB': NBCoords, 'SB': SBCoords, 'EB': EBCoords, 'WB': WBCoords}
         tempDir = [NBCoords, SBCoords, WBCoords, EBCoords]
-        DIRECTION_KEYWORDS = [['NB Total Volume', 'NB Total Vol', 'NB', 'Northbound'],
-                              ['SB Total Volume', 'SB Total Vol', 'SB', 'Southbound'],
-                              ['WB Total Volume', 'WB Total Vol', 'WB', 'Westbound'],
-                              ['EB Total Volume', 'EB Total Vol', 'EB', 'Eastbound']
-                              ]
 
-        for dir, key in zip(tempDir, DIRECTION_KEYWORDS):
+
+        for dir, key in zip(tempDir, excelUtil.DIRECTION_KEYWORDS):
             tempLoc = self.findCell(key)
             if tempLoc[0]:
                 dir[0] = True
@@ -154,24 +158,65 @@ class excelUtil:
         return [DATA, FLAGGED]
 
 
-    def checkInstance(self, string):
-        instance = []
+    def checkNumberInstances(self, string):
+        i = 0
 
         for row in range(self.sheet.nrows):
             for col in range(self.sheet.ncols):
                 if self.sheet.cell(row, col).value == string:
-                    instance.append((row, col))
+                    i = i + 1
 
-        return instance
+        return i
+
+    def dayValidation(self, data):
+        if sum(data) == 0:
+            return False
+
+        return True
+
+
+class multiExcelUtil(excelUtil, object):
+
+    def __init__(self, filepath):
+        super(multiExcelUtil, self).__init__(filepath)
+        self.sheet = self.workbook.sheet_by_index(0)
+
+    def getAllInstances(self, string):
+        instances = []
+        for text in string:
+            for row in range(self.sheet.nrows):
+                for col in range(self.sheet.ncols):
+                    if self.sheet.cell(row, col).value == text:
+                        instances.append([row, col])
+
+        return instances
+
+    def findDirectionCell(self):
+
+        NBCoords = [False]
+        SBCoords = [False]
+        WBCoords = [False]
+        EBCoords = [False]
+        DIRECTIONS = {'NB': NBCoords, 'SB': SBCoords, 'EB': EBCoords, 'WB': WBCoords}
+        tempDir = [NBCoords, SBCoords, WBCoords, EBCoords]
+
+        for dir, key in zip(tempDir, excelUtil.DIRECTION_KEYWORDS):
+            tempLoc = self.getAllInstances(key)
+            if tempLoc.__len__() > 0:
+                dir[0] = True
+                dir.append(tempLoc)
+
+        return DIRECTIONS
+
+
 
 
 #Handle excel writes
 class excelWrite:
 
     #Parameters: workbook and formatted date string
-    def __init__(self, workbook, date):
+    def __init__(self, workbook):
         self.workbook = workbook
-        self.workbook.get_sheet('YYYY.MM.DD').name = date
 
     #Writes in workbook
     #Parameters: index of sheet, row, col, string you want to input
@@ -183,7 +228,6 @@ class excelWrite:
     def inputData(self, sheetIndex, data, row, col, filledCol):
         print data
         done = 1
-
         while data.__len__() > 0:
             self.workbook.get_sheet(sheetIndex).write(row + done, col + filledCol, data.popleft())
             done = done + 1
@@ -197,6 +241,9 @@ class excelWrite:
     def getWorkbook(self):
         return self.workbook
 
+    def changeSheetName(self, index, name):
+        sheetName = 'Sheet' + (str)(index + 1)
+        self.workbook.get_sheet(sheetName).name = name
 
 
 
@@ -245,8 +292,7 @@ class mapUtil:
 
 
         if matchedStreets != 3:
-            name_error = "NAME_ERROR"
-
+            name_error = "NAME_ERROR_"
 
         if self.isVertical:
             if self.lat_1 > self.lat_2:
@@ -377,24 +423,42 @@ class mapUtil:
 #Formats date
 #Parameter: Date from cell
 def dateFormat(DATE):
+    hasNameDate = False
+    nameDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    if isinstance(DATE, str) or isinstance(DATE, unicode):
+    if DATE == '-':
+        return False
+
+    for days in nameDays:
+        if days in DATE:
+            hasNameDate = True
+
+    if (isinstance(DATE, str) or isinstance(DATE, unicode)) and hasNameDate:
         #Splitting substring
         tempDate = DATE[DATE.find(',') + 2:]
         year = tempDate[tempDate.find(',') + 2:]
         month = tempDate[:tempDate.find(' ')]
         day = tempDate[tempDate.find(' ') + 1:tempDate.find(',')]
         month = MONTHS[month]
-    elif isinstance(DATE, tuple):
+
+    elif isinstance(DATE, tuple) and not hasNameDate:
         year = DATE[0]
         month = DATE[1]
         day = DATE[2]
+
+    elif (isinstance(DATE, str) or isinstance(DATE, unicode)) and not hasNameDate:
+        year = DATE[DATE.find(',') + 1:].strip()
+        DATE = DATE[:DATE.find(',')]
+        month = DATE[:DATE.find(' ')].strip()
+        day = DATE[DATE.find(' '):].strip()
+        month = MONTHS[month]
+
 
 
     #Add extra zero in front if the values are less than 10
 
     if int(month) < 10:
-        numberMonth = '0' + str(month)
+        month = '0' + str(month)
 
     if int(day) < 10:
         day = '0' + str(day)
@@ -407,3 +471,19 @@ def dateFormat(DATE):
 #Return: Array of ints
 def findCharInString(s, ch):
     return [i for i, ltr in enumerate(s) if ltr == ch]
+
+def dayValidation(data):
+    sum = 0
+
+    for num in data:
+        sum = sum + num
+
+    if sum > 0:
+        return True
+    else:
+        return False
+
+
+
+
+
