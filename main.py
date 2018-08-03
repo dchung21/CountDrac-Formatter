@@ -28,12 +28,13 @@ DIRECTORY_PATH_MULTIDAY = CONFIG.get("FILE_PATHS", "DIRECTORY_PATH_MULTIDAY")
 DIRECTORY_PATH_MULTIDAY_ORIG = CONFIG.get("FILE_PATHS", "DIRECTORY_PATH_MULTIDAY_ORIG")
 fileDir = os.listdir(DIRECTORY_PATH)
 mainlineDir = os.listdir(DIRECTORY_PATH_MAINLINE)
+formattedMainline = os.listdir(DIRECTORY_PATH_FORMATTED_MAINLINE)
 
 
 MONTHS = {v: k for k, v in enumerate(calendar.month_name)}
 fileType = enum(IDAX='IDAX', ADT='ADT', COUNTSUNLIMITED='CountsUnlimited')
 
-
+#Basic template to format files
 class MainlineFormatShell():
     def __init__(self, filename, filterKeyword, fileDir, fileType, dateKeyword):
         self.filename = filename
@@ -44,6 +45,8 @@ class MainlineFormatShell():
         self.dateKeyword = dateKeyword
         self.numberOfdays = self.workbook.checkNumberInstances(self.dateKeyword)
 
+    #Function to execute everything else, call this function. do not directly invoke the other ones
+    #This picks whether or not the file is a "multi-day"
     def execute(self):
         if self.numberOfdays == 1:
             self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE)
@@ -52,7 +55,7 @@ class MainlineFormatShell():
 
         elif self.numberOfdays > 1:
             self.workbook = SheetUtil.multiExcelUtil(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename))
-            self.multiFilterShell(self.numberOfdays)
+            self.multiFilterShell()
 
     #Returns bounds in array -> [rowMin, rowMax, colMin, colMax]
     #Parameters to_someVal = the coordinate of the location cell, add_someVal = what to add to get the correct bounds of ata
@@ -65,7 +68,7 @@ class MainlineFormatShell():
         return [rowMin, rowMax, colMin, colMax]
 
 
-
+    #Basic template to format files with single dates
     def filterShell(self):
         if self.workbook.findCell([self.filterKeyword])[0] == True:
             print 'Entering ' + self.filename
@@ -125,91 +128,124 @@ class MainlineFormatShell():
 
             if 'NAME_ERROR' in str(self.newFilename):
                 self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_NAME_ERROR, self.newFilename))
-                #shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_NAME_ERROR_ORIG)
+                shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_NAME_ERROR_ORIG)
 
             elif 'MULTI_DAY' in str(self.newFilename):
                 self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_MULTIDAY, self.newFilename))
-                #shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_MULTIDAY_ORIG)
+                shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_MULTIDAY_ORIG)
             else:
                 self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_FORMATTED_MAINLINE, self.newFilename))
-                #shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_ORIGINAL)
+                shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_ORIGINAL)
 
 
+    #Basic template to format files with multiple days
+    def multiFilterShell(self):
+            print('Entering ' + self.filename)
+            self.DIRECTIONS = self.workbook.findDirectionCell()
+            print(self.DIRECTIONS)
+
+            dates = self.workbook.getAllInstances([self.dateKeyword])
+            formattedDates = []
+            indexesToRemove = []
+
+            for index, dateRow in enumerate(dates):
+                f = dateRow[0]
+                tempDate = self.workbook.getRightCell(dateRow[0]).value
+
+                if tempDate != '-':
+                    formattedDates.append(SheetUtil.dateFormat(tempDate))
+                elif tempDate == '-':
+                    dates.remove(dateRow)
+                    indexesToRemove.append(index)
+
+            # Create new workbook
+            if dates.__len__() == 1:
+                self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE)
+                self.excelWrite = SheetUtil.excelWrite(self.newBook)
+
+            if dates.__len__() == 2:
+                self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE2)
+                self.excelWrite = SheetUtil.excelWrite(self.newBook)
+
+            if dates.__len__() == 3:
+                self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE3)
+                self.excelWrite = SheetUtil.excelWrite(self.newBook)
+
+            if dates.__len__() == 4:
+                self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE4)
+                self.excelWrite = SheetUtil.excelWrite(self.newBook)
+
+            for key in self.DIRECTIONS:
+                if self.DIRECTIONS.get(key)[0]:
+                    for index in indexesToRemove:
+                        del self.DIRECTIONS.get(key)[1][index]
+
+            filledCols = 0
+
+            for key in self.DIRECTIONS:
+                if self.DIRECTIONS.get(key)[0]:
+
+                    dir = key
+                    for index, coord in enumerate(self.DIRECTIONS.get(key)[1]):
+                        to_rowMin = coord[0]
+                        to_rowMax = coord[0]
+                        to_colMin = coord[1]
+                        to_colMax = coord[1]
+
+                        if self.fileType == 'IDAX':
+                            bound = self.getBounds(to_rowMin, to_rowMax, to_colMin, to_colMax, 3, 27, -2, 2)
+                        elif self.fileType == 'ADT':
+                            bound = self.getBounds(to_rowMin, to_rowMax, to_colMin, to_colMax, 3, 27, -1, 3)
+
+                        self.DATA = self.workbook.getData(bound[0], bound[1], bound[2], bound[3])
+                        validData = SheetUtil.dayValidation(self.DATA[0])
+                        print(validData)
+
+                        if validData:
+                            sheet = self.excelWrite.getSheet(index)
+                            self.excelWrite.changeSheetName(index, formattedDates[index])
+                            self.excelWrite.write(index, 1, 1 + filledCols, dir)
+                            self.excelWrite.inputData(index, self.DATA[0], 1, 1, filledCols)
+                            self.excelWrite.write(index, 1, 5, '')
+
+            if self.fileType == 'ADT':
+                self.location = self.workbook.getLocation(self.fileType)
+                self.mapUtil = SheetUtil.mapUtil(self.location, GOOGLEMAP_APIKEY)
+                self.newFilename = self.mapUtil.mainlineNaming()
+
+            else:
+                self.newFilename = 'formatted ' + self.filename + '.xls'
+            self.excelWrite.write(dates.__len__(), 0, 0, self.filename)
+            self.newWorkbookSave = self.excelWrite.getWorkbook()
+
+            if 'formatted' in str(self.newFilename):
+                self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_MULTIDAY, self.newFilename))
+                shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_MULTIDAY_ORIG)
+            else:
+                self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_FORMATTED_MAINLINE, self.newFilename))
+                shutil.move(os.path.join(DIRECTORY_PATH_MAINLINE, self.filename), DIRECTORY_PATH_ORIGINAL)
 
 
-    def multiFilterShell(self, iterations):
+#To validate files
+class ValidationCheck():
+    def __init__(self, filename):
+        self.filename = filename
+        self.workbook = SheetUtil.excelUtil(os.path.join(DIRECTORY_PATH_FORMATTED_MAINLINE, filename))
+        print('Checking ' + filename)
 
-        self.DIRECTIONS = self.workbook.findDirectionCell()
-        print(self.DIRECTIONS)
+    def checkEmptyWorkbook(self):
+        numberSheets = self.workbook.getNumberSheets()
 
-        dates = self.workbook.getAllInstances([self.dateKeyword])
-        formattedDates = []
-        indexesToRemove = []
+        for sheet in range(numberSheets - 1):
+            self.workbook.getSheet(sheet)
 
-        #TODO
-        for index, dateRow in enumerate(dates):
-            f = dateRow[0]
-            tempDate = self.workbook.getRightCell(dateRow[0]).value
+            try:
+                if self.workbook.checkEmptyCell(1, 1):
+                    print('Empty!')
+            except(IndexError):
+                print('Error: Empty')
 
-            if tempDate != '-':
-                formattedDates.append(SheetUtil.dateFormat(tempDate))
-            elif tempDate == '-':
-                dates.remove(dateRow)
-                indexesToRemove.append(index)
 
-        # Create new workbook
-        if dates.__len__() == 1:
-            self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE)
-            self.excelWrite = SheetUtil.excelWrite(self.newBook)
-
-        if dates.__len__() == 2:
-            self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE2)
-            self.excelWrite = SheetUtil.excelWrite(self.newBook)
-
-        if dates.__len__() == 3:
-            self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE3)
-            self.excelWrite = SheetUtil.excelWrite(self.newBook)
-
-        if dates.__len__() == 4:
-            self.newBook = self.workbook.createNewWorkbook(MAINLINE_TEMPLATE4)
-            self.excelWrite = SheetUtil.excelWrite(self.newBook)
-
-        for key in self.DIRECTIONS:
-            if self.DIRECTIONS.get(key)[0]:
-                for index in indexesToRemove:
-                    del self.DIRECTIONS.get(key)[1][index]
-
-        filledCols = 0
-
-        for key in self.DIRECTIONS:
-            if self.DIRECTIONS.get(key)[0]:
-
-                dir = key
-                for index, coord in enumerate(self.DIRECTIONS.get(key)[1]):
-                    to_rowMin = coord[0]
-                    to_rowMax = coord[0]
-                    to_colMin = coord[1]
-                    to_colMax = coord[1]
-
-                    if self.fileType == 'IDAX':
-                        bound = self.getBounds(to_rowMin, to_rowMax, to_colMin, to_colMax, 3, 27, -2, 2)
-                    elif self.fileType == 'ADT':
-                        bound = self.getBounds(to_rowMin, to_rowMax, to_colMin, to_colMax, 3, 27, -1, 3)
-
-                    self.DATA = self.workbook.getData(bound[0], bound[1], bound[2], bound[3])
-                    validData = SheetUtil.dayValidation(self.DATA[0])
-                    print(validData)
-
-                    if validData:
-                        sheet = self.excelWrite.getSheet(index)
-                        self.excelWrite.changeSheetName(index, formattedDates[index])
-                        self.excelWrite.write(index, 1, 1 + filledCols, dir)
-                        self.excelWrite.inputData(index, self.DATA[0], 1, 1, filledCols)
-                        self.excelWrite.write(index, 1, 5, '')
-
-        self.excelWrite.write(dates.__len__(), 0, 0, self.filename)
-        self.newWorkbookSave = self.excelWrite.getWorkbook()
-        self.newWorkbookSave.save(os.path.join(DIRECTORY_PATH_FORMATTED_MAINLINE, 'abcd.xls'))
 
 
 
@@ -280,7 +316,11 @@ def ADTFormat():
 def IDAXFormat():
     for filename in mainlineDir:
         idax = MainlineFormatShell(filename, MAINLINE_KEYWORDS[2], mainlineDir, fileType.IDAX, 'DATE:')
-        idax.multiFilterShell(4)
+        idax.execute()
 
+def checkEmptyFiles():
+    for filename in formattedMainline:
+        valid = ValidationCheck(filename)
+        valid.checkEmptyWorkbook()
 
-ADTFormat()
+checkEmptyFiles()

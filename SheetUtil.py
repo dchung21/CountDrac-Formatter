@@ -30,6 +30,10 @@ class excelUtil:
         self.sheet = self.workbook.sheet_by_index(i)
         return self.sheet
 
+    #returns number of sheets
+    def getNumberSheets(self):
+        return self.workbook.nsheets
+
     #Parameters: String array
     #Return [0]: True/False stating if the string was found in the sheet
     #Return [1] and [2]: Row and col
@@ -58,7 +62,6 @@ class excelUtil:
     #Return [0]: True/False stating if there are any empty cells
     #Return [1] [2]: Row and col
     #Prone to crashes bc of out of bounds exceptions
-    #TODO: Fix unchecked exceptions
     def emptyRightCell(self, row):
         col = 0
         while col < 5:
@@ -91,6 +94,7 @@ class excelUtil:
             return dateFormat(xldate_as_tuple(dateValue, self.workbook.datemode))
 
     #Gets location string from cell
+    #Parameter: What type of file is it. eg adt, countsunlimited
     def getLocation(self, fileType):
         if fileType == 'ADT':
             locationRow = self.findCell(['LOCATION:'])[1]
